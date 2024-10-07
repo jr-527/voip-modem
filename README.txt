@@ -1,3 +1,5 @@
+Plan:
+
 Structure (each box is a process)
  _________________________________
 |                                 |
