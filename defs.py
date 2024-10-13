@@ -35,10 +35,11 @@ def short_read_pipe(max_bytes: int) -> bytes:
     Reads up to `max_bytes` bytes from stdin.
     """
     global windows_pipe_init
+    # global os
     if sys.platform == "win32" and not windows_pipe_init[0]:
         windows_pipe_init[0] = True
         # set sys.stdin to binary mode
-        import os, msvcrt
+        import msvcrt
         msvcrt.setmode(sys.stdin.fileno(), os.O_BINARY)
     return os.read(0, max_bytes)
 
@@ -46,12 +47,12 @@ def read_pipe(num_bytes: int) -> bytes:
     """
     Reads `num_bytes` bytes from stdin. Blocks until it's done.
     """
-    global os # what the fuck?
+    # global os
     global windows_pipe_init
     if sys.platform == "win32" and not windows_pipe_init[0]:
         windows_pipe_init[0] = True
         # set sys.stdin to binary mode
-        import os, msvcrt
+        import msvcrt
         msvcrt.setmode(sys.stdin.fileno(), os.O_BINARY)
     out: list[bytes] = []
     num_read: int = 0

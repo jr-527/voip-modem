@@ -22,12 +22,12 @@ def main(args):
 
 if __name__ == "__main__":
     parser = ArgumentParser(prog="main.py", description="Runs the voip-modem")
-    parser.add_argument("-record", default="test.py")
+    parser.add_argument("-record", default="record.py")
     parser.add_argument("-demod", default="test.py")
-    parser.add_argument("-decode", default="test.py")
+    parser.add_argument("-decode", default="hamming")
     parser.add_argument("-protocol", default="test.py")
-    parser.add_argument("-encode", default="test.py")
+    parser.add_argument("-encode", default="hamming")
     parser.add_argument("-mod", default="test.py")
-    parser.add_argument("-play", default="test.py")
+    parser.add_argument("-play", default="play.py")
     args = parser.parse_args()
     main(args)

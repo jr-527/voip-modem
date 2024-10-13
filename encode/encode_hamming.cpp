@@ -1,8 +1,9 @@
 #include "../defs.c"
 #include "../common_algorithms/hamming.cpp"
-#include <iostream>
+// #include <iostream>
 
 int main() {
+    log("Encode (Hamming) Initializing\n");
     uint8_t decoded[4];
     uint8_t encoded[7];
     while (read_pipe((char*)&decoded, 4) != -1) {
@@ -11,5 +12,5 @@ int main() {
         bitsetToBytes<7>(s, encoded);
         write_pipe((char*)encoded, 7);
     }
-    log("encode (hamming v1) reached EOF\n");
+    log("Encode (Hamming) reached EOF\n");
 }

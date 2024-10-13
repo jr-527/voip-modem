@@ -20,7 +20,7 @@ Structure (each box is a process)
 |     |               bits w/ ECC |
 |  ___V________     ________|___  |
 | |  modulate  |   | demodulate | |
-| |  (COFDM?)  |   |  (COFDM?)  | |
+| |    OFDM?   |   |    OFDM?   | |
 | |____________|   |____________| |
 |     |                     A     |
 | digital signal            |     |
@@ -59,7 +59,7 @@ the system commands while it's running, as stdin is already taken.
 Here is what each component does:
 
 record: Record audio and output it as a digital signal. The output should use
-one 16-bit signed int per sample. It doesn't particularly matter what the sample
+one 32-bit float per sample. It doesn't particularly matter what the sample
 rate is, as long as the "play" component uses the same sample rate.
 
 demodulate: Demodulate the digital signal. The "modulate" component should use
@@ -76,7 +76,8 @@ encode: Apply ECC.
 modulate: Modulate bytes to a digital signal. Should be the inverse of the
 "demod" component.
 
-play: Play the digital signal as audio.
+play: Play the digital signal as audio. Should be the inverse of the "play"
+component.
 
 I made a read_pipe and write_pipe function in defs.c and defs.py. The C
 read_pipe function blocks until it reads the desired number of bytes. The Python

@@ -17,7 +17,7 @@ def _exe(filename: str) -> list[str]:
 
 def run_pipe(program_list: list[str]) -> bytes:
     """
-    Usage: pipe([file1, file2, ...])
+    Usage: run_pipe([file1, file2, ...])
     """
     programs = [_exe(filename) for filename in program_list]
     name_str = " | ".join((" ".join(x) for x in programs))
@@ -50,9 +50,10 @@ def run_pipe(program_list: list[str]) -> bytes:
     return out
 
 def main():
-    run_pipe(["test0.py"])
-    run_pipe(["test1.py", "test2.py"])
-    run_pipe(["test1", "test2"])
+    run_pipe(["record/record.py", "play/play.py"])
+    # run_pipe(["test0.py"])
+    # run_pipe(["test1.py", "test2.py"])
+    # run_pipe(["test1", "test2"])
 
 if __name__ == "__main__":
     main()
