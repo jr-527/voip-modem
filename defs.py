@@ -15,7 +15,7 @@ def timestamp() -> str:
     """
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
 
-def log(msg: str, *args: tuple[str]):
+def log(msg, *args):
     """
     Writes a log message to stdout. Has an identical call signature to printf.
     I recommend doing log(timestamp() + log_msg)
@@ -23,7 +23,7 @@ def log(msg: str, *args: tuple[str]):
     if len(args) == 0:
         print(msg, file=sys.stderr)
     else:
-        print(msg%args, file=sys.stderr)
+        print(str(msg)%args, file=sys.stderr)
 
 def write_pipe(data: bytes):
     """Writes `data` to stdout. Blocks until it's done."""

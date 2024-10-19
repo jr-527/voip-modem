@@ -77,7 +77,7 @@ modulate: Modulate bytes to a digital signal. Should be the inverse of the
 "demod" component.
 
 play: Play the digital signal as audio. Should be the inverse of the "play"
-component.
+component. If no data is available, it should be silent and wait.
 
 I made a read_pipe and write_pipe function in defs.c and defs.py. The C
 read_pipe function blocks until it reads the desired number of bytes. The Python
