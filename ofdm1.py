@@ -1,6 +1,3 @@
-import sys
-from os import path
-sys.path.append(path.dirname(path.dirname(path.abspath(__file__))))
 import numpy as np
 import scipy.signal as sig
 import matplotlib.pyplot as plt
@@ -9,14 +6,21 @@ import time
 BYTES_PER_SYMBOL = 480
 PILOT_INTERVAL = 16
 SYMBOL_LENGTH = 1024
-GUARD_LENGTH = 256
+GUARD_LENGTH = 256 # Does the guard even accomplish anything?
 ISI_LENGTH = SYMBOL_LENGTH+GUARD_LENGTH
 SAMPLES_PER_SYMBOL = (SYMBOL_LENGTH+GUARD_LENGTH)*3
 SAMPLES_PER_GUARD = GUARD_LENGTH*3
 FS = 48000
 MLS_FREQ = 21000 
 
-def linregress(y, x0=0, dx=1):
+# If we send a message that's mostly constant, ie mostly zero bytes, the IFFT
+# has a lot of power concentrated in the 0 bin, which gives us an awful PAPR.
+# To fix this, we just xor with a pre-calculated random sequence. If somebody
+# wants to send that sequence we'll be in trouble but that's extremely unlikely.
+np.random.seed(123)
+pseudo_random_sequence =  bytes(list(np.random.randint(0, 256, BYTES_PER_SYMBOL)))
+
+def linregress(y, x0=0, dx=1): # unused
     """
     Performs a linear regression on y, where the abscissa at y[i] is x0+dx*i
     Returns (slope, intercept).
@@ -105,9 +109,6 @@ def generate_mls_signal(length=3*ISI_LENGTH, mls_length=ISI_LENGTH, freq=MLS_FRE
     sig2 = energy/len(t)*np.exp(2*np.pi*1j*freq*t+np.pi/2)
     return sig1*code_seq + sig2*(1-code_seq) # type: ignore
 
-np.random.seed(123)
-pseudo_random_sequence =  bytes(list(np.random.randint(0, 256, BYTES_PER_SYMBOL)))
-
 
 def add_every_nth(arr, new_item, n:int):
     n -= 1
@@ -161,8 +162,8 @@ def decode_segment(segment: np.ndarray) -> bytes:
     phases = np.unwrap(np.angle(pilots), .3)
     # plt.plot(phases)
     # plt.show()
-    slope, offset = linregress(phases)
-    time_offset = slope/(500 * np.pi)
+    # slope, offset = linregress(phases)
+    # time_offset = slope/(500 * np.pi)
     # log(f"Estimated old offset: {time_offset*1000} ms ({time_offset*48000} samples @ 48 KHz)")
     # time_offset = np.mean(np.ediff1d(phases))/(500*np.pi)
     # log(f"Estimated offset: {time_offset*1000} ({time_offset*48000})")
