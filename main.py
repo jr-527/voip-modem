@@ -1,33 +1,69 @@
-from pipe_setup import run_pipe
-from defs import timestamp
-from argparse import ArgumentParser
+from os import _exit
 
-def main(args):
-    print("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
-    print("@\n@")
-    print("@ %s Starting voip-modem" % timestamp())
-    print("@\n@")
-    print("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
-    files = ["record/"+args.record, "demodulate/"+args.demod, "decode/"+args.decode,
-        "protocol/"+args.protocol, "encode/"+args.encode, "modulate/"+args.mod,
-        "play/"+args.play
-    ]
-    run_pipe(files)
-    print("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
-    print("@\n@")
-    print("@ %s voip-modem done" % timestamp())
-    print("@\n@")
-    print("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
+import time
+import argparse
+import traceback
+
+# my modules
+from cli import (UserInterface, UIenum, UIMessage, reset, color_magenta,
+    help_text, color_yellow
+    )
+from protocol import Protocol
+from play import PlaybackWorker, PipedConsumer
+from piped_worker import DummyPipedWorker
+from modulate import ModulateOFDM
+from demodulate import DemodulateOFDM
+import initialize
+
+should_exit = False
+
+
+def exit_callback():
+    # sys.exit isn't powerful enough
+    _exit(0)
+
+
+def main():
+    # get device indices
+    parser = argparse.ArgumentParser(prog="voip-modem 0.2.0")
+    parser.add_argument("-i", "--input", type=int)
+    parser.add_argument("-o", "--output", type=int)
+    parser.add_argument("-l", "--log", action="store_true")
+    args = parser.parse_args()
+    input_idx = args.input # -1 for no input
+    output_idx = args.output # -1 for no output
+    if (args.input is None) or (args.output is None):
+        try:
+            input_idx, output_idx = initialize.main()
+        except KeyboardInterrupt:
+            return
+    ui = UserInterface(exit_callback=exit_callback, log_to_file=args.log)
+    protocol = Protocol(ui)
+    modulator = ModulateOFDM()
+    demodulator = DemodulateOFDM()
+    player: PipedConsumer
+    if output_idx is not None and output_idx != -1:
+        player = PlaybackWorker(output_idx, samples_per_buffer=3840)
+    else:
+        player = DummyPipedWorker()
+    modulator.set_target(player)
+    # modulator.set_target(demodulator)
+    demodulator.set_target(protocol)
+    protocol.set_target(modulator)
+    protocol.run()
+    ui.run(protocol)
+    player.run()
+    try:
+        while not should_exit:
+            time.sleep(.103)
+    except Exception:
+        print("uncaught exception:")
+        print(traceback.format_exc())
+    except KeyboardInterrupt:
+        ui.stop = True
+        print(reset)
+        print(color_magenta + "Exiting" + reset)
 
 
 if __name__ == "__main__":
-    parser = ArgumentParser(prog="main.py", description="Runs the voip-modem")
-    parser.add_argument("-record", default="record.py")
-    parser.add_argument("-demod", default="test.py")
-    parser.add_argument("-decode", default="hamming")
-    parser.add_argument("-protocol", default="test.py")
-    parser.add_argument("-encode", default="hamming")
-    parser.add_argument("-mod", default="test.py")
-    parser.add_argument("-play", default="play.py")
-    args = parser.parse_args()
-    main(args)
+    main()

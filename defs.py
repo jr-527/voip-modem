@@ -1,3 +1,4 @@
+'''
 import sys
 import os
 import time
@@ -5,6 +6,9 @@ from datetime import datetime
 from typing import Callable, Any, NoReturn
 import functools
 import operator
+from multiprocessing.connection import Client, Listener
+from threading import Thread
+from abc import ABCMeta, abstractmethod
 
 windows_pipe_init = [False]
 
@@ -89,3 +93,97 @@ def repeat_every(func: Callable[[], Any], delay: float) -> NoReturn:
         prev = now
         func()
         time.sleep(delay - ((time.monotonic() - start_time) % delay))
+
+
+
+class PythonIPC(metaclass=ABCMeta):
+    """You need to implement main_loop_iteration and receive_message"""
+    def __init__(self, address: tuple[str, int], mode: str):
+        """
+        address: ast.literal_eval(sys.argv[1])
+        mode: "client" or "host"
+        """
+        self._interrupt = False
+        assert mode in ("client", "host")
+        self.mode = mode
+        self.address = address
+        self.connection_started = False
+        if self.mode == "host":
+            self.listener = Listener(self.address, authkey=b"voip-modem password!")
+            self.address = self.listener.address
+
+
+    def __del__(self):
+        self.stop()
+
+
+    def _thread_func_recv(self):
+        try:
+            while not self._interrupt:
+                if self._conn.poll():
+                    x = self._conn.recv_bytes().decode("utf-8")
+                    msg_type = x[0]
+                    msg = x[1:]
+                    self.receive_message(msg, msg_type)
+                time.sleep(.05)
+        except:
+            self._interrupt = True
+
+
+    def _thread_main_loop(self):
+        try:
+            while not self._interrupt:
+                time.sleep(.05)
+                self.main_loop_iteration()
+        except:
+            self._interrupt = True
+
+
+    def start_connection(self):
+        self.connection_started = True
+        if self.mode == "client":
+            self.address = self.address
+            self._conn = Client(self.address, authkey=b"voip-modem password!")
+        else:
+            self._conn = self.listener.accept()
+        thread1 = Thread(target=self._thread_func_recv)
+        thread1.start()
+
+
+    def run_main_loop(self):
+        if not self.connection_started:
+            self.start_connection()
+        thread = Thread(target=self._thread_main_loop)
+        thread.start()
+
+
+    def send_message(self, message: str, message_type=">"):
+        out = bytes(message_type, encoding="utf-8")
+        out += bytes(message, encoding="utf-8")
+        self._conn.send_bytes(out)
+
+
+    def stop(self):
+        self._interrupt = True
+        if self.mode == "host":
+            self.listener.close()
+    
+
+    def is_alive(self):
+        return not self._interrupt
+
+
+    @abstractmethod
+    def main_loop_iteration(self):
+        """Needs to be implemented. Can just return without doing anything."""
+        raise NotImplementedError
+    
+    @abstractmethod
+    def receive_message(self, message: str, message_type: str):
+        """
+        Needs to be implemented. This gets called whenever a message is received.
+        message: Whatever message
+        message_type: String with len 1. ">" for plain text, "j" for json, "q" means the other end is signing off
+        """
+        raise NotImplementedError
+'''

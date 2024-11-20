@@ -152,15 +152,21 @@ class DeviceTester:
         stream.stop_stream()
         p.terminate()
 
+def main() -> tuple[int, int]:
+    x = get_devices()
+    if x is None:
+        raise RuntimeError("Could not detect audio devices, aborting.")
+    dt = DeviceTester(x)
+    print("Press control-c to exit input volume test")
+    dt.test_input_device(-1)
+    print("\nPress control-c to exit output playback test")
+    dt.test_output_device(-1)
+    input_index = dt.input_device["index"]
+    output_index = dt.output_device["index"]
+    return input_index, output_index
+
 if __name__ == '__main__':
     try:
-        x = get_devices()
-        # print(x)
-        if x:
-            dt = DeviceTester(x)
-            print("Press control-c to exit input volume test")
-            dt.test_input_device(-1)
-            print("Press control-c to exit output playback test")
-            dt.test_output_device(-1)
+        main()
     except KeyboardInterrupt:
         pass

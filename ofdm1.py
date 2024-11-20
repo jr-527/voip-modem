@@ -1,7 +1,6 @@
 import sys
 from os import path
 sys.path.append(path.dirname(path.dirname(path.abspath(__file__))))
-from defs import write_pipe, log
 import numpy as np
 import scipy.signal as sig
 import matplotlib.pyplot as plt
@@ -95,7 +94,8 @@ def invHilbert(cData: np.ndarray) -> np.ndarray[tuple[int], np.dtype[np.float32]
 
 
 mls = sig.max_len_seq(8)[0]
-def generate_mls_signal(length=3*ISI_LENGTH, mls_length=ISI_LENGTH, freq=MLS_FREQ, energy=3) -> list[complex]:
+def generate_mls_signal(length=3*ISI_LENGTH, mls_length=ISI_LENGTH, freq=MLS_FREQ,
+                        energy=3) -> list[complex]:
     # We need to stretch mls to be approximately the same length as default_length
     stretch_factor = (length-1)//len(mls)
     stretched = np.repeat(mls, stretch_factor)
@@ -104,6 +104,9 @@ def generate_mls_signal(length=3*ISI_LENGTH, mls_length=ISI_LENGTH, freq=MLS_FRE
     sig1 = energy/len(t)*np.exp(2*np.pi*1j*freq*t)
     sig2 = energy/len(t)*np.exp(2*np.pi*1j*freq*t+np.pi/2)
     return sig1*code_seq + sig2*(1-code_seq) # type: ignore
+
+np.random.seed(123)
+pseudo_random_sequence =  bytes(list(np.random.randint(0, 256, BYTES_PER_SYMBOL)))
 
 
 def add_every_nth(arr, new_item, n:int):
@@ -123,6 +126,7 @@ def generate_segment(data: bytes, add_mls=True):
     data: A bytes object of length BYTES_PER_SYMBOL
     """
     assert len(data) == BYTES_PER_SYMBOL
+    data = bytes([x ^ y for (x,y) in zip(data, pseudo_random_sequence)])
     data = scramble(data)
     # data = add_every_nth(data, b'\0', PILOT_INTERVAL)
     qam_symbols = bytes_to_qam(data)
@@ -134,6 +138,7 @@ def generate_segment(data: bytes, add_mls=True):
     with_guard = np.append(shifted[-GUARD_LENGTH*3:], shifted)
     if add_mls:
         with_guard += generate_mls_signal()
+    # return invHilbert(with_guard)/8
     return invHilbert(with_guard)/8
 
 
@@ -154,20 +159,27 @@ def decode_segment(segment: np.ndarray) -> bytes:
     # We compensate for any phase changes caused by getting the time-offset wrong.
     pilots = qam_symbols[PILOT_INTERVAL-1::PILOT_INTERVAL]
     phases = np.unwrap(np.angle(pilots), .3)
+    # plt.plot(phases)
+    # plt.show()
     slope, offset = linregress(phases)
     time_offset = slope/(500 * np.pi)
     # log(f"Estimated old offset: {time_offset*1000} ms ({time_offset*48000} samples @ 48 KHz)")
     # time_offset = np.mean(np.ediff1d(phases))/(500*np.pi)
     # log(f"Estimated offset: {time_offset*1000} ({time_offset*48000})")
     time_offset = np.median(np.ediff1d(phases))/(500*np.pi)
-    # log(f"Estimated new offset: {time_offset*1000} ({time_offset*48000})")
+    # log(f"Estimated new offset: {time_offset*1000} ms ({time_offset*48000} samples)")
     f = np.linspace(0, 16000, len(qam_symbols))
     qam_symbols *= np.exp(-2*np.pi*1j*time_offset*f)
-    pilots = qam_symbols[PILOT_INTERVAL-1::PILOT_INTERVAL]
-    qam_symbols *= (-1.5+1.5j)/np.mean(pilots)
+    pilots2 = qam_symbols[PILOT_INTERVAL-1::PILOT_INTERVAL]
+    # plot_constellation(pilots2)
+    qam_symbols *= (-1.5+1.5j)/np.mean(pilots2)
+    qam_symbols[:len(qam_symbols)//2+1] *=(-1.5+1.5j)/np.mean(pilots2[:len(pilots2)//2+1])
+    qam_symbols[len(qam_symbols)//2+1:] *=(-1.5+1.5j)/np.mean(pilots2[len(pilots2)//2+1:])
     # plot_constellation(qam_symbols)
     pilots_removed = remove_every_nth(qam_symbols, PILOT_INTERVAL)
-    return unscramble(qam_to_bytes(pilots_removed))
+    data = unscramble(qam_to_bytes(pilots_removed))
+    return  bytes([x ^ y for (x,y) in zip(data, pseudo_random_sequence)])
+    # return unscramble(qam_to_bytes(pilots_removed))
 
 def plot_complex(*args, name=""):
     if len(args) == 1:
@@ -217,7 +229,8 @@ def synchronize(signal: np.ndarray):
     Returns the start index of the first full frame
     """
     mls_signal = generate_mls_signal(3*ISI_LENGTH, MLS_FREQ)
-    filter = sig.butter(4, (MLS_FREQ-1000, MLS_FREQ+1000), btype="bandpass", fs=FS, output="sos")
+    filter = sig.butter(4, (MLS_FREQ-1000, MLS_FREQ+1000), btype="bandpass", fs=FS,
+                        output="sos")
     filtered = sig.sosfiltfilt(filter, signal)
     corr = np.abs(sig.correlate(mls_signal, filtered))
     filter2 = sig.butter(4, 0.01, output='sos')
@@ -226,15 +239,22 @@ def synchronize(signal: np.ndarray):
     argmax = np.argmax(corr)
     # plt.plot(corr)
     # plt.show()
+    if np.std(corr) == 0:
+        return None
     if corr[argmax]/np.std(corr) > 4:
         return (-lags[argmax])%(3*ISI_LENGTH)
     return None
 
 if __name__ == "__main__":
+    # np.random.seed(12)
     data = bytes(list(np.random.randint(0, 256, 256+255)))[:BYTES_PER_SYMBOL]
-    data = bytes([0]*BYTES_PER_SYMBOL)
     start = time.time()
+    print("random data")
     signal = generate_segment(data, add_mls=True)
+    assert decode_segment(signal) == data
+    plt.plot(signal)
+    plt.show()
+    print("first random data done")
     # log(signal[:20]*1000)
     # log(signal[:20]*1000)
     # decoded = decode_segment(signal)
@@ -249,29 +269,28 @@ if __name__ == "__main__":
     signal2 = generate_segment(data2, True)
     signal3 = generate_segment(data3, True)
     signal4 = generate_segment(data4, True)
-    true_idx = 4
+    true_idx = 400
     incoming_signal = np.append(np.append(signal2, signal3), signal4)[true_idx:]
     rms_amplitude = np.sqrt(np.mean(np.abs(incoming_signal)**2))
-    log(f"signal rmse: {rms_amplitude}")
-    snr = 350
-    log("This has a poor sensitivity to noise. Consider changing to 4-QAM (4-QPSK?)")
-    log(f"{snr=} dB")
+    print(f"signal rmse: {rms_amplitude}")
+    snr = 40
+    print(f"{snr=} dB")
     noise_multiplier = np.sqrt(10**(-snr/10)*rms_amplitude)
     noise = np.random.normal(0, noise_multiplier, incoming_signal.shape)
     noise_power = np.mean(np.abs(noise)**2)
-    log(f"noise power: {noise_power}")
-    # incoming_signal += noise
+    print(f"noise power: {noise_power}")
+    incoming_signal += noise
     idx = synchronize(incoming_signal[:3*ISI_LENGTH])
-    log(f"est idx: {idx}")
-    log(f"offset error: {idx-(3840-true_idx)}") # type:ignore
+    print(f"est idx: {idx}")
+    print(f"offset error: {idx-(3840-true_idx)}") # type:ignore
     # I'm getting slammed by the time shifting property. This adds a phase
     # difference that's linear with time. Use the 32 added 0 bytes to find,
     # remove this phase difference. Also need to 
     if idx is not None:
         decoded2 = decode_segment(incoming_signal[idx:idx+3*ISI_LENGTH])
-        log(f"true:   {bytes2binstr(data2[:10])} ... {bytes2binstr(data2[-10:])}")
-        log(f"true:   {bytes2binstr(data3[:10])} ... {bytes2binstr(data3[-10:])}")
-        log(f"result: {bytes2binstr(decoded2[:10])} ... {bytes2binstr(decoded2[-10:])}")
+        print(f"true:   {bytes2binstr(data2[:10])} ... {bytes2binstr(data2[-10:])}")
+        print(f"true:   {bytes2binstr(data3[:10])} ... {bytes2binstr(data3[-10:])}")
+        print(f"result: {bytes2binstr(decoded2[:10])} ... {bytes2binstr(decoded2[-10:])}")
     else:
         print("idx is None")
 # length = len(signal)
